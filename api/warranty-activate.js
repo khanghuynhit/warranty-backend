@@ -4,6 +4,16 @@
 // Response: { success: true, activatedAt: "..." }
 
 export default async function handler(req, res) {
+  // Cho phép Zalo Mini App gọi API
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Xử lý preflight request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -16,7 +26,8 @@ export default async function handler(req, res) {
 
   try {
     // ← Thêm logic lưu database của bạn ở đây
-    // Ví dụ: await db.insert({ phone, orderId, activatedAt: new Date() });
+    // Ví dụ MongoDB:
+    // await WarrantyModel.create({ phone, orderId, activatedAt: new Date() });
 
     console.log(`✅ Kích hoạt bảo hành: ${orderId} - ${phone}`);
 
