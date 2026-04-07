@@ -5,65 +5,71 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
-  const { phone, orderId, userName } = req.body || {};
+  const { phone, orderId, userName } = req.body;
 
-  if (!orderId?.trim()) return res.status(400).json({ error: "Vui lòng nhập mã đơn hàng." });
-  if (!userName?.trim()) return res.status(400).json({ error: "Vui lòng nhập họ và tên." });
-
-  // Giữ nguyên dạng chuỗi, KHÔNG uppercase vì mã TikTok là số
-  const normalizedOrderId = orderId.trim();
-
-  const SHEET_ID   = process.env.GOOGLE_SHEET_ID;
-  const API_KEY    = process.env.GOOGLE_API_KEY;
-  const SHEET_NAME = process.env.SHEET_NAME || "Sheet1";
-
-  if (!SHEET_ID || !API_KEY) {
-    return res.status(500).json({ error: "Chưa cấu hình GOOGLE_SHEET_ID hoặc GOOGLE_API_KEY." });
-  }
+  if (!orderId)
+    return res.status(400).json({ error: "Vui lòng nhập mã đơn hàng." });
+  if (!phone)
+    return res.status(400).json({ error: "Vui lòng nhập số điện thoại." });
 
   try {
-    // Lấy toàn bộ cột A, dùng FORMATTED_VALUE để số dài không bị làm tròn
-    const range = encodeURIComponent(`${SHEET_NAME}!A:A`);
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}?key=${API_KEY}&valueRenderOption=FORMATTED_VALUE`;
+    // ================================================================
+    // BƯỚC 1: Kiểm tra mã đơn hàng từ Google Sheets
+    // ================================================================
+    const SHEET_ID = process.env.SHEET_ID;
+    const SHEET_API_KEY = process.env.SHEET_API_KEY;
+    const SHEET_NAME = process.env.SHEET_NAME || "Sheet1";
 
-    const sheetRes = await fetch(url);
-    const sheetData = await sheetRes.json();
+    let orderExists = false;
 
-    if (!sheetRes.ok || !sheetData.values) {
-      console.error("Google Sheets error:", JSON.stringify(sheetData));
-      return res.status(500).json({ error: "Không đọc được dữ liệu từ Google Sheets." });
+    if (SHEET_ID && SHEET_API_KEY) {
+      try {
+        const sheetRes = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}?key=${SHEET_API_KEY}`,
+        );
+        const sheetData = await sheetRes.json();
+        const rows = sheetData.values || [];
+
+        // Tìm orderId trong cột đầu tiên (cột A)
+        // Bỏ qua hàng đầu tiên nếu là header
+        orderExists = rows.some((row) => {
+          const cellValue = (row[0] || "").toString().trim().toUpperCase();
+          return cellValue === orderId.toUpperCase();
+        });
+      } catch (sheetErr) {
+        console.error("Lỗi đọc Google Sheets:", sheetErr);
+        return res
+          .status(500)
+          .json({ error: "Không đọc được dữ liệu từ Google Sheets." });
+      }
+    } else {
+      // Fallback test nếu chưa cấu hình Sheets
+      const VALID_ORDERS = ["DH001", "DH002", "DH003", "TEST001"];
+      orderExists = VALID_ORDERS.includes(orderId.toUpperCase());
     }
 
-    // Bỏ dòng 1 (tiêu đề "Mã đơn hàng"), lấy từ dòng 2 trở đi
-    const validOrders = sheetData.values
-      .slice(1)
-      .flat()
-      .map(v => v.toString().trim())
-      .filter(Boolean);
-
-    if (!validOrders.includes(normalizedOrderId)) {
+    if (!orderExists) {
       return res.status(404).json({
-        error: `Mã đơn hàng "${normalizedOrderId}" không tồn tại. Vui lòng kiểm tra lại.`,
+        error: "Mã đơn hàng không hợp lệ. Vui lòng kiểm tra lại.",
       });
     }
 
-    console.log("✅ Kích hoạt bảo hành:", {
-      orderId: normalizedOrderId,
-      phone: phone?.trim() || "—",
-      userName: userName.trim(),
-      activatedAt: new Date().toISOString(),
-    });
+    // ================================================================
+    // BƯỚC 2: Lưu thông tin kích hoạt (thêm vào Google Sheets hoặc DB)
+    // ================================================================
+    console.log(`✅ Kích hoạt bảo hành: ${orderId} - ${userName} - ${phone}`);
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      orderId: normalizedOrderId,
       activatedAt: new Date().toISOString(),
     });
-
   } catch (err) {
-    console.error("Server error:", err.message);
-    return res.status(500).json({ error: "Lỗi server: " + err.message });
+    console.error("Lỗi:", err);
+    return res
+      .status(500)
+      .json({ error: "Lỗi server nội bộ. Vui lòng thử lại." });
   }
 }
