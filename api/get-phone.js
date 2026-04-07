@@ -1,39 +1,29 @@
 // api/get-phone.js
-// Endpoint: POST /api/get-phone
-// Body: { token: "..." }
-// Response: { phoneNumber: "0912345678" }
-
 export default async function handler(req, res) {
-  // Cho phép Zalo Mini App gọi API
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Xử lý preflight request
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: "Thiếu token" });
-  }
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "Thiếu token" });
 
   const APP_ID = process.env.APP_ID;
   const SECRET_KEY = process.env.SECRET_KEY;
 
+  if (!APP_ID || !SECRET_KEY) {
+    return res.status(500).json({ error: "Thiếu cấu hình APP_ID hoặc SECRET_KEY" });
+  }
+
   try {
-    // Bước 1: Đổi token lấy access_token
-    const oaTokenRes = await fetch("https://oauth.zaloapp.com/v4/oa/access_token", {
+    // ✅ Đúng endpoint cho Mini App (không phải /oa/)
+    const tokenRes = await fetch("https://oauth.zaloapp.com/v4/access_token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        secret_key: SECRET_KEY,
+        "secret_key": SECRET_KEY,
       },
       body: new URLSearchParams({
         app_id: APP_ID,
@@ -42,37 +32,44 @@ export default async function handler(req, res) {
       }),
     });
 
-    const oaToken = await oaTokenRes.json();
+    const tokenData = await tokenRes.json();
 
-    if (!oaToken.access_token) {
-      return res.status(500).json({ error: "Không lấy được access_token từ Zalo" });
+    if (!tokenData.access_token) {
+      console.error("Zalo token error:", JSON.stringify(tokenData));
+      return res.status(500).json({
+        error: "Không lấy được access_token",
+        detail: tokenData,
+      });
     }
 
-    // Bước 2: Dùng access_token lấy số điện thoại
+    // Lấy SĐT từ Zalo Graph API
     const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
       method: "GET",
       headers: {
-        access_token: oaToken.access_token,
-        code: token,
-        secret_key: SECRET_KEY,
+        "access_token": tokenData.access_token,
+        "code": token,
+        "secret_key": SECRET_KEY,
       },
     });
 
     const phoneData = await phoneRes.json();
 
-    // Chuẩn hoá "+84912345678" → "0912345678"
-    const rawPhone = phoneData?.data?.number || "";
-    const phoneNumber = rawPhone.startsWith("+84")
-      ? "0" + rawPhone.slice(3)
-      : rawPhone;
-
-    if (!phoneNumber) {
-      return res.status(404).json({ error: "Không tìm thấy số điện thoại" });
+    if (!phoneData?.data?.number) {
+      console.error("Zalo phone error:", JSON.stringify(phoneData));
+      return res.status(500).json({
+        error: "Không lấy được số điện thoại",
+        detail: phoneData,
+      });
     }
 
-    return res.json({ phoneNumber });
+    // Chuẩn hoá: +84912345678 → 0912345678
+    const raw = phoneData.data.number;
+    const phoneNumber = raw.startsWith("+84") ? "0" + raw.slice(3) : raw;
+
+    return res.status(200).json({ phoneNumber });
+
   } catch (err) {
-    console.error("Lỗi:", err);
-    return res.status(500).json({ error: "Lỗi server nội bộ" });
+    console.error("Server error:", err.message);
+    return res.status(500).json({ error: "Lỗi server: " + err.message });
   }
 }

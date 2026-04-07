@@ -1,57 +1,69 @@
+// api/warranty-activate.js
 export default async function handler(req, res) {
-  // Handle CORS preflight
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const { phone, orderId, userName } = req.body || {};
+
+  if (!orderId?.trim()) return res.status(400).json({ error: "Vui lòng nhập mã đơn hàng." });
+  if (!userName?.trim()) return res.status(400).json({ error: "Vui lòng nhập họ và tên." });
+
+  // Giữ nguyên dạng chuỗi, KHÔNG uppercase vì mã TikTok là số
+  const normalizedOrderId = orderId.trim();
+
+  const SHEET_ID   = process.env.GOOGLE_SHEET_ID;
+  const API_KEY    = process.env.GOOGLE_API_KEY;
+  const SHEET_NAME = process.env.SHEET_NAME || "Sheet1";
+
+  if (!SHEET_ID || !API_KEY) {
+    return res.status(500).json({ error: "Chưa cấu hình GOOGLE_SHEET_ID hoặc GOOGLE_API_KEY." });
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  try {
+    // Lấy toàn bộ cột A, dùng FORMATTED_VALUE để số dài không bị làm tròn
+    const range = encodeURIComponent(`${SHEET_NAME}!A:A`);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}?key=${API_KEY}&valueRenderOption=FORMATTED_VALUE`;
 
-  const { phone, orderId, userName } = req.body;
+    const sheetRes = await fetch(url);
+    const sheetData = await sheetRes.json();
 
-  if (!orderId || !orderId.trim()) {
-    return res.status(400).json({ error: "Vui lòng nhập mã đơn hàng." });
-  }
+    if (!sheetRes.ok || !sheetData.values) {
+      console.error("Google Sheets error:", JSON.stringify(sheetData));
+      return res.status(500).json({ error: "Không đọc được dữ liệu từ Google Sheets." });
+    }
 
-  if (!userName || !userName.trim()) {
-    return res.status(400).json({ error: "Vui lòng nhập họ và tên." });
-  }
+    // Bỏ dòng 1 (tiêu đề "Mã đơn hàng"), lấy từ dòng 2 trở đi
+    const validOrders = sheetData.values
+      .slice(1)
+      .flat()
+      .map(v => v.toString().trim())
+      .filter(Boolean);
 
-  // Lưu dữ liệu vào database (MongoDB, Google Sheets, v.v.)
-  // Hiện tại: log ra console, bạn thay bằng DB thật sau
-  console.log("✅ Kích hoạt bảo hành:", {
-    orderId: orderId.trim().toUpperCase(),
-    userName: userName.trim(),
-    phone: phone?.trim() || "—",
-    activatedAt: new Date().toISOString(),
-  });
+    if (!validOrders.includes(normalizedOrderId)) {
+      return res.status(404).json({
+        error: `Mã đơn hàng "${normalizedOrderId}" không tồn tại. Vui lòng kiểm tra lại.`,
+      });
+    }
 
-  // TODO: Kết nối MongoDB
-  // const { MongoClient } = require("mongodb");
-  // const client = new MongoClient(process.env.MONGODB_URI);
-  // await client.connect();
-  // const db = client.db("warranty");
-  // await db.collection("activations").insertOne({
-  //   orderId: orderId.trim().toUpperCase(),
-  //   userName: userName.trim(),
-  //   phone: phone?.trim() || "",
-  //   activatedAt: new Date(),
-  // });
-  // await client.close();
-
-  return res.status(200).json({
-    success: true,
-    message: "Kích hoạt bảo hành thành công.",
-    data: {
-      orderId: orderId.trim().toUpperCase(),
+    console.log("✅ Kích hoạt bảo hành:", {
+      orderId: normalizedOrderId,
+      phone: phone?.trim() || "—",
       userName: userName.trim(),
-      phone: phone?.trim() || "",
       activatedAt: new Date().toISOString(),
-    },
-  });
+    });
+
+    return res.status(200).json({
+      success: true,
+      orderId: normalizedOrderId,
+      activatedAt: new Date().toISOString(),
+    });
+
+  } catch (err) {
+    console.error("Server error:", err.message);
+    return res.status(500).json({ error: "Lỗi server: " + err.message });
+  }
 }
