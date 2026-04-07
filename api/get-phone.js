@@ -1,13 +1,8 @@
 // api/get-phone.js
-// Endpoint: POST /api/get-phone
-// Body: { token: "..." }  ← token từ getPhoneNumber() của Mini App SDK
-// Response: { phoneNumber: "0912345678" }
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -18,9 +13,8 @@ export default async function handler(req, res) {
   const SECRET_KEY = process.env.SECRET_KEY;
 
   try {
-    // Bước 1: Đổi token lấy access_token
-    // Mini App dùng endpoint v4/miniapp, không phải v4/oa
-    const oaTokenRes = await fetch("https://oauth.zaloapp.com/v4/miniapp/access_token", {
+    // Bước 1: Đổi token lấy access_token (đúng endpoint cho Mini App)
+    const oaTokenRes = await fetch("https://oauth.zaloapp.com/v4/access_token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -62,7 +56,10 @@ export default async function handler(req, res) {
       : rawPhone;
 
     if (!phoneNumber) {
-      return res.status(404).json({ error: "Không tìm thấy số điện thoại" });
+      return res.status(404).json({
+        error: "Không tìm thấy số điện thoại",
+        detail: phoneData,
+      });
     }
 
     return res.json({ phoneNumber });
