@@ -13,8 +13,8 @@ export default async function handler(req, res) {
   const SECRET_KEY = process.env.SECRET_KEY;
 
   try {
-    // Bước 1: Đổi token lấy access_token (đúng endpoint cho Mini App)
-    const oaTokenRes = await fetch("https://oauth.zaloapp.com/v4/access_token", {
+    // Đúng endpoint cho Zalo Mini App (khác với Social/OA API)
+    const oaTokenRes = await fetch("https://oauth.zaloapp.com/v4/oa/access_token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Bước 2: Lấy số điện thoại
+    // Lấy số điện thoại
     const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
       method: "GET",
       headers: {
