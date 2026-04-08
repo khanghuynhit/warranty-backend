@@ -59,6 +59,8 @@ export default async function handler(req, res) {
     const phoneData = await phoneRes.json();
     console.log("PhoneData:", JSON.stringify(phoneData));
 
+    console.log("PhoneData:", phoneData);
+
     const rawPhone = phoneData?.data?.number || "";
 
     const phoneNumber = rawPhone.startsWith("+84")
