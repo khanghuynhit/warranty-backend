@@ -1,25 +1,27 @@
+// api/get-phone.js
+// Endpoint: POST /api/get-phone
+// Body: { token: "..." }  ← token từ getPhoneNumber() của Mini App SDK
+// Response: { phoneNumber: "0912345678" }
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-  }
 
   const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: "Thiếu token" });
-  }
+  if (!token) return res.status(400).json({ error: "Thiếu token" });
 
   const APP_ID = process.env.APP_ID;
   const SECRET_KEY = process.env.SECRET_KEY;
 
   try {
-    // ✅ STEP 1: đổi token → access_token
-    const tokenRes = await fetch(
+    // Bước 1: Đổi token lấy access_token
+    // Mini App dùng endpoint v4/miniapp, không phải v4/oa
+    const oaTokenRes = await fetch(
       "https://oauth.zaloapp.com/v4/miniapp/access_token",
       {
         method: "POST",
@@ -35,43 +37,36 @@ export default async function handler(req, res) {
       },
     );
 
-    const tokenData = await tokenRes.json();
-    console.log("TokenData:", JSON.stringify(tokenData));
+    const oaToken = await oaTokenRes.json();
+    console.log("Token response:", JSON.stringify(oaToken));
 
-    if (!tokenData.access_token) {
+    if (!oaToken.access_token) {
       return res.status(500).json({
         error: "Không lấy được access_token",
-        detail: tokenData,
+        detail: oaToken,
       });
     }
 
-    // ✅ STEP 2: lấy số điện thoại
-    const phoneRes = await fetch(
-      "https://graph.zalo.me/v2.0/me/info?fields=phone",
-      {
-        method: "GET",
-        headers: {
-          access_token: tokenData.access_token,
-        },
+    // Bước 2: Lấy số điện thoại
+    const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
+      method: "GET",
+      headers: {
+        access_token: oaToken.access_token,
+        code: token,
+        secret_key: SECRET_KEY,
       },
-    );
+    });
 
     const phoneData = await phoneRes.json();
-    console.log("PhoneData:", JSON.stringify(phoneData));
-
-    console.log("PhoneData:", phoneData);
+    console.log("Phone data:", JSON.stringify(phoneData));
 
     const rawPhone = phoneData?.data?.number || "";
-
     const phoneNumber = rawPhone.startsWith("+84")
       ? "0" + rawPhone.slice(3)
       : rawPhone;
 
     if (!phoneNumber) {
-      return res.status(404).json({
-        error: "Không lấy được số điện thoại",
-        detail: phoneData,
-      });
+      return res.status(404).json({ error: "Không tìm thấy số điện thoại" });
     }
 
     return res.json({ phoneNumber });
