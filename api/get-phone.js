@@ -9,68 +9,47 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { token } = req.body;
+  const { access_token } = req.body;
 
-  if (!token) {
-    return res.status(400).json({ error: "Thiếu token" });
+  if (!access_token) {
+    return res.status(400).json({ error: "Thiếu access_token" });
   }
 
-  const APP_ID = process.env.APP_ID;
-  const SECRET_KEY = process.env.SECRET_KEY;
-
   try {
-    // ✅ BƯỚC 1: đổi token → access_token (Mini App API)
-    const tokenRes = await fetch(
-      "https://oauth.zaloapp.com/v4/miniapp/access_token",
+    // ✅ GỌI API ĐÚNG (Zalo Login)
+    const userRes = await fetch(
+      "https://graph.zalo.me/v2.0/me?fields=id,name,picture,phone",
       {
-        method: "POST",
+        method: "GET",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          secret_key: SECRET_KEY,
+          access_token: access_token,
         },
-        body: new URLSearchParams({
-          app_id: APP_ID,
-          grant_type: "authorization_code",
-          code: token,
-        }),
       },
     );
 
-    const tokenData = await tokenRes.json();
-    console.log("TokenData:", JSON.stringify(tokenData));
+    const userData = await userRes.json();
+    console.log("Zalo userData:", JSON.stringify(userData));
 
-    if (!tokenData.access_token) {
-      return res.status(500).json({
-        error: "Không lấy được access_token",
-        detail: tokenData,
+    if (userData.error) {
+      return res.status(400).json({
+        error: "Zalo API error",
+        detail: userData,
       });
     }
 
-    // ✅ BƯỚC 2: lấy số điện thoại
-    const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
-      method: "GET",
-      headers: {
-        access_token: tokenData.access_token,
-      },
-    });
+    const rawPhone = userData?.phone || "";
 
-    const phoneData = await phoneRes.json();
-    console.log("PhoneData:", JSON.stringify(phoneData));
-
-    const rawPhone = phoneData?.data?.number || "";
-
+    // chuẩn hoá số VN
     const phoneNumber = rawPhone.startsWith("+84")
       ? "0" + rawPhone.slice(3)
       : rawPhone;
 
-    if (!phoneNumber) {
-      return res.status(404).json({
-        error: "Không lấy được số điện thoại",
-        detail: phoneData,
-      });
-    }
-
-    return res.json({ phoneNumber });
+    return res.json({
+      name: userData.name || null,
+      id: userData.id || null,
+      avatar: userData.picture?.data?.url || null,
+      phoneNumber: phoneNumber || null,
+    });
   } catch (err) {
     console.error("Lỗi get-phone:", err);
     return res.status(500).json({ error: "Lỗi server nội bộ" });
