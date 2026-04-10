@@ -49,6 +49,7 @@ export default async function handler(req, res) {
 
     // BƯỚC 2: Ghi thông tin kích hoạt vào sheet "BaoHanh"
     const activatedAt = new Date().toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
