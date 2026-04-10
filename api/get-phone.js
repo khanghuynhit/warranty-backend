@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     // Bước 1: Đổi token lấy access_token
     // Mini App dùng endpoint v4/miniapp, không phải v4/oa
     const oaTokenRes = await fetch(
-      "https://oauth.zaloapp.com/v4/miniapp/access_token",
+      "https://oauth.zaloapp.com/v4/oa/access_token",
       {
         method: "POST",
         headers: {
