@@ -1,3 +1,7 @@
+// api/get-phone.js
+// Token từ getPhoneNumber() của Mini App SDK là access_token của user
+// KHÔNG cần đổi qua bước lấy access_token nữa — dùng thẳng
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -10,41 +14,15 @@ export default async function handler(req, res) {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "Thiếu token" });
 
-  const APP_ID = process.env.APP_ID;
   const SECRET_KEY = process.env.SECRET_KEY;
+  const APP_ID = process.env.APP_ID;
 
   try {
-    const oaTokenRes = await fetch(
-      "https://oauth.zaloapp.com/v4/access_token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          secret_key: SECRET_KEY,
-        },
-        body: new URLSearchParams({
-          app_id: APP_ID,
-          grant_type: "authorization_code",
-          code: token,
-        }),
-      },
-    );
-
-    const oaToken = await oaTokenRes.json();
-    console.log("Token response:", JSON.stringify(oaToken));
-
-    if (!oaToken.access_token) {
-      return res.status(500).json({
-        error: "Không lấy được access_token",
-        detail: oaToken,
-      });
-    }
-
+    // token từ getPhoneNumber() là access_token của user — dùng thẳng
     const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
       method: "GET",
       headers: {
-        access_token: oaToken.access_token,
-        code: token,
+        access_token: token,
         secret_key: SECRET_KEY,
       },
     });
@@ -58,7 +36,31 @@ export default async function handler(req, res) {
       : rawPhone;
 
     if (!phoneNumber) {
-      return res.status(404).json({ error: "Không tìm thấy số điện thoại" });
+      // Fallback: thử endpoint khác nếu graph.zalo.me không trả SĐT
+      const phoneRes2 = await fetch(
+        `https://openapi.zalo.me/v2.0/me?fields=id,name,phone`,
+        {
+          headers: {
+            access_token: token,
+          },
+        },
+      );
+      const phoneData2 = await phoneRes2.json();
+      console.log("Phone data (fallback):", JSON.stringify(phoneData2));
+
+      const rawPhone2 = phoneData2?.phone || "";
+      const phoneNumber2 = rawPhone2.startsWith("+84")
+        ? "0" + rawPhone2.slice(3)
+        : rawPhone2;
+
+      if (!phoneNumber2) {
+        return res.status(404).json({
+          error: "Không tìm thấy số điện thoại",
+          debug: { phoneData, phoneData2 },
+        });
+      }
+
+      return res.json({ phoneNumber: phoneNumber2 });
     }
 
     return res.json({ phoneNumber });
