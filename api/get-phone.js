@@ -8,79 +8,83 @@ export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
-  // Log toàn bộ body nhận được để xem đang truyền field gì
-  console.log("Request body:", JSON.stringify(req.body));
-
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "Thiếu token" });
 
   const SECRET_KEY = process.env.SECRET_KEY;
   const APP_ID = process.env.APP_ID;
 
-  console.log("Token nhận được:", token);
-  console.log("Token length:", token.length);
-  console.log("APP_ID:", APP_ID ? "có" : "thiếu");
-  console.log("SECRET_KEY:", SECRET_KEY ? "có" : "thiếu");
+  const results = {};
 
   try {
-    // Thử cách 1: dùng token trực tiếp làm access_token
-    const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
+    // Thử 1: graph.zalo.me với access_token + secret_key
+    const r1 = await fetch("https://graph.zalo.me/v2.0/me/info", {
       method: "GET",
-      headers: {
-        access_token: token,
-        secret_key: SECRET_KEY,
-      },
+      headers: { access_token: token, secret_key: SECRET_KEY },
     });
-    const phoneData = await phoneRes.json();
-    console.log("Cách 1 - graph.zalo.me:", JSON.stringify(phoneData));
+    results.try1 = await r1.json();
+    console.log("Try1:", JSON.stringify(results.try1));
 
-    if (phoneData?.data?.number) {
-      const rawPhone = phoneData.data.number;
-      const phoneNumber = rawPhone.startsWith("+84")
-        ? "0" + rawPhone.slice(3)
-        : rawPhone;
-      return res.json({ phoneNumber });
-    }
-
-    // Thử cách 2: đổi token lấy access_token qua Mini App endpoint
-    const tokenRes = await fetch("https://oauth.zaloapp.com/v4/access_token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        secret_key: SECRET_KEY,
-      },
-      body: new URLSearchParams({
-        app_id: APP_ID,
-        grant_type: "authorization_code",
-        code: token,
-      }),
-    });
-    const tokenData = await tokenRes.json();
-    console.log("Cách 2 - access_token:", JSON.stringify(tokenData));
-
-    if (tokenData.access_token) {
-      const phoneRes2 = await fetch("https://graph.zalo.me/v2.0/me/info", {
-        method: "GET",
-        headers: {
-          access_token: tokenData.access_token,
-          secret_key: SECRET_KEY,
-        },
+    if (results.try1?.data?.number) {
+      const n = results.try1.data.number;
+      return res.json({
+        phoneNumber: n.startsWith("+84") ? "0" + n.slice(3) : n,
       });
-      const phoneData2 = await phoneRes2.json();
-      console.log("Cách 2 - phone:", JSON.stringify(phoneData2));
-
-      if (phoneData2?.data?.number) {
-        const rawPhone = phoneData2.data.number;
-        const phoneNumber = rawPhone.startsWith("+84")
-          ? "0" + rawPhone.slice(3)
-          : rawPhone;
-        return res.json({ phoneNumber });
-      }
     }
 
+    // Thử 2: graph.zalo.me chỉ với access_token, không có secret_key
+    const r2 = await fetch("https://graph.zalo.me/v2.0/me/info", {
+      method: "GET",
+      headers: { access_token: token },
+    });
+    results.try2 = await r2.json();
+    console.log("Try2:", JSON.stringify(results.try2));
+
+    if (results.try2?.data?.number) {
+      const n = results.try2.data.number;
+      return res.json({
+        phoneNumber: n.startsWith("+84") ? "0" + n.slice(3) : n,
+      });
+    }
+
+    // Thử 3: openapi.zalo.me
+    const r3 = await fetch(
+      "https://openapi.zalo.me/v2.0/me?fields=id,name,phone",
+      {
+        method: "GET",
+        headers: { access_token: token },
+      },
+    );
+    results.try3 = await r3.json();
+    console.log("Try3:", JSON.stringify(results.try3));
+
+    if (results.try3?.phone) {
+      const n = results.try3.phone;
+      return res.json({
+        phoneNumber: n.startsWith("+84") ? "0" + n.slice(3) : n,
+      });
+    }
+
+    // Thử 4: miniapp API riêng
+    const r4 = await fetch(
+      `https://graph.zalo.me/v2.0/me?fields=id,name,phone&access_token=${token}`,
+      { method: "GET" },
+    );
+    results.try4 = await r4.json();
+    console.log("Try4:", JSON.stringify(results.try4));
+
+    if (results.try4?.phone) {
+      const n = results.try4.phone;
+      return res.json({
+        phoneNumber: n.startsWith("+84") ? "0" + n.slice(3) : n,
+      });
+    }
+
+    // Không tìm được
+    console.log("Tất cả cách đều thất bại:", JSON.stringify(results));
     return res.status(404).json({
       error: "Không lấy được số điện thoại",
-      debug: { phoneData, tokenData: tokenData || null },
+      debug: results,
     });
   } catch (err) {
     console.error("Lỗi:", err);
