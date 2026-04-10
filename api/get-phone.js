@@ -1,4 +1,14 @@
 export default async function handler(req, res) {
+  // Xử lý CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Trả về 200 cho preflight OPTIONS
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -15,9 +25,9 @@ export default async function handler(req, res) {
     const phoneRes = await fetch("https://graph.zalo.me/v2.0/me/info", {
       method: "GET",
       headers: {
-        access_token: accessToken, // từ sdk.getAccessToken() ở client
-        code: token, // từ getPhoneNumber() ở client
-        secret_key: SECRET_KEY, // secret key của Zalo App
+        access_token: accessToken,
+        code: token,
+        secret_key: SECRET_KEY,
       },
     });
 
