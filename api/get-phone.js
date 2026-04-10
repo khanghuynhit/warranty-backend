@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   try {
     const oaTokenRes = await fetch(
-      "https://oauth.zaloapp.com/v4/oa/access_token",
+      "https://oauth.zaloapp.com/v4/access_token",
       {
         method: "POST",
         headers: {
