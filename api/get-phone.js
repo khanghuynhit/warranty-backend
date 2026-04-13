@@ -13,6 +13,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // DEMO MODE
+  if (process.env.DEMO_MODE === "true") {
+    return res.json({ phoneNumber: "0900000000" });
+  }
+
   const { token, accessToken } = req.body;
 
   if (!token || !accessToken) {

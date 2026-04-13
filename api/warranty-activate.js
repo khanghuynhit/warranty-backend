@@ -16,6 +16,16 @@ export default async function handler(req, res) {
   if (!userName)
     return res.status(400).json({ error: "Vui lòng nhập họ và tên." });
 
+  // DEMO MODE
+  if (process.env.DEMO_MODE === "true") {
+    return res.json({
+      success: true,
+      activatedAt: new Date().toLocaleString("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      }),
+    });
+  }
+
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
   const SHEET_NAME = process.env.SHEET_NAME || "Sheet1";
 
