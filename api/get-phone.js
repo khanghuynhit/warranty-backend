@@ -14,9 +14,9 @@ export default async function handler(req, res) {
   }
 
   // DEMO MODE
-  if (process.env.DEMO_MODE === "true") {
-    return res.json({ phoneNumber: "0900000000" });
-  }
+  // if (process.env.DEMO_MODE === "true") {
+  //   return res.json({ phoneNumber: "0900000000" });
+  // }
 
   const { token, accessToken } = req.body;
 
